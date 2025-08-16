@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Moody Glass Weather</title>
+    <link rel="icon" href="{{ url_for('static', filename='travel.png') }}" type="image/png">  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg1:#0b1020;
+      --bg2:#121733;
+      --bg3:#1a1835;
+      --accent:#7dd3ff;     /* electric blue accent */
+      --accent2:#b084ff;    /* violet accent */
+      --text:#e9f2ff;
+      --muted:#afbdd6;
+      --glass:rgba(255,255,255,0.08);
+      --glass-stroke:rgba(255,255,255,0.18);
+      --shadow: 0 12px 40px rgba(0,0,0,.55);
+    }
+
+    * { box-sizing: border-box; }
+    html,body { height:100%; }
+    body{
+      margin:0;
+      color:var(--text);
+      font-family:"Sora", system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, sans-serif;
+      background:
+        radial-gradient(90vmax 90vmax at -10% -10%, #1b2547 0%, transparent 35%),
+        radial-gradient(80vmax 80vmax at 110% -10%, #2a1f45 0%, transparent 40%),
+        linear-gradient(160deg, var(--bg1), var(--bg2) 50%, var(--bg3));
+      min-height:100svh;
+      overflow:hidden;
+    }
+
+
+    /* Error Card Styles */
+.error-card {
+    text-align: center;
+    padding: 32px 24px;
+    max-width: 480px;
+    margin: 0 auto;
+    background: rgba(255, 77, 79, 0.08);
+    border-color: rgba(255, 77, 79, 0.25);
+}
+
+.error-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+
+.error-content h3 {
+    margin: 0;
+    font-size: 1.4rem;
+    color: #ff6d6f;
+    letter-spacing: 0.3px;
+}
+
+.error-content p {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.5;
+}
+
+.error-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 13px;
+}
+
+.error-code {
+    color: #ff8a8c;
+    font-family: monospace;
+}
+
+.error-message {
+    color: var(--muted);
+    font-style: italic;
+}
+
+/* Animation for error icon */
+.error-card svg {
+    animation: pulse 1.5s ease infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+    /* Atmospheric scene layers */
+    .scene{
+      position:fixed;
+      inset:0;
+      pointer-events:none;
+      overflow:hidden;
+      z-index:0;
+    }
+    .glow{
+      position:absolute;
+      width:65vmax;
+      height:65vmax;
+      border-radius:50%;
+      filter:blur(70px) saturate(130%);
+      opacity:.16;
+      mix-blend-mode:screen;
+    }
+    .glow.g1{ left:-15vmax; top:-12vmax; background:radial-gradient(circle, rgba(91,155,255,.9), transparent 65%); }
+    .glow.g2{ right:-12vmax; bottom:-18vmax; background:radial-gradient(circle, rgba(200,120,255,.85), transparent 65%); }
+
+    /* Gentle lightning flicker */
+    .lightning{
+      position:absolute; inset:0;
+      background:radial-gradient(60vmax 40vmax at 65% 15%, rgba(255,255,255,.5), transparent 60%);
+      mix-blend-mode:screen; opacity:0; animation:flash 14s linear infinite;
+    }
+    @keyframes flash{
+      0%, 96%, 100% { opacity:0; }
+      97% { opacity:.18; }
+      98% { opacity:0; }
+      99% { opacity:.08; }
+    }
+
+    /* Rain layer (subtle diagonal streaks) */
+    .rain{
+      position:absolute; inset:-40% -40% -20% -40%;
+      background-image: repeating-linear-gradient(120deg,
+        rgba(255,255,255,.14) 0 1px,
+        rgba(255,255,255,0) 1px 12px);
+      opacity:.23;
+      transform: skewX(-12deg);
+      animation: rain 900ms linear infinite;
+      filter: blur(.2px);
+    }
+    @keyframes rain{
+      from { background-position: 0 -24px; }
+      to   { background-position: 0 0; }
+    }
+
+    /* Low drifting fog */
+    .fog{
+      position:absolute; left:-20%; width:140%; height:60%;
+      background: radial-gradient(closest-side at 50% 50%,
+        rgba(255,255,255,.12), rgba(255,255,255,.02) 60%, transparent 70%);
+      filter: blur(24px) saturate(80%);
+      opacity:.18;
+      animation: drift 60s linear infinite both;
+    }
+    .fog.f1{ top:18%; animation-duration: 70s; }
+    .fog.f2{ top:56%; opacity:.14; animation-duration: 85s; }
+    @keyframes drift{
+      0%   { transform: translateX(-6%); }
+      50%  { transform: translateX(6%); }
+      100% { transform: translateX(-6%); }
+    }
+
+    /* Layout */
+    .wrap{
+      position:relative; z-index:1;
+      max-width:1120px; margin:0 auto; padding:28px 18px 40px;
+      min-height:100svh; display:grid; grid-template-rows:auto 1fr auto; gap:22px;
+    }
+    header{
+      display:flex; gap:16px; align-items:center; justify-content:space-between;
+    }
+    .brand{
+      display:flex; align-items:center; gap:12px; letter-spacing:.5px;
+      font-weight:700; font-size:1.05rem; color:var(--text);
+    }
+    .brand .dot{
+      width:10px; height:10px; border-radius:50%;
+      background: radial-gradient(circle, var(--accent) 0 40%, #fff0 70%);
+      box-shadow: 0 0 12px var(--accent);
+    }
+
+    .search{
+      display:flex; gap:8px; align-items:center; min-width: 240px;
+    }
+    .input{
+      flex:1; display:flex; align-items:center; gap:10px;
+      padding:10px 12px; border-radius:14px; color:var(--text);
+      background: var(--glass); border:1px solid var(--glass-stroke);
+      backdrop-filter: blur(12px) saturate(140%);
+      -webkit-backdrop-filter: blur(12px) saturate(140%);
+      box-shadow: var(--shadow);
+    }
+    .input input{
+      all:unset; width:100%; color:var(--text);
+      font-weight:400; letter-spacing:.2px; opacity:.9;
+    }
+    .btn{
+      cursor:pointer; user-select:none;
+      padding:10px 14px; border-radius:14px; font-weight:600;
+      color:#0c1329; background:linear-gradient(180deg, var(--accent), #70bfff);
+      border:0; box-shadow: 0 6px 18px rgba(125,211,255,.35);
+      transition: transform .15s ease, filter .15s ease;
+    }
+    .btn:hover{ transform: translateY(-1px); filter:saturate(110%); }
+    .btn:active{ transform: translateY(0); }
+
+    /* Glass card */
+    .card{
+      position:relative; border-radius:22px;
+      background: var(--glass);
+      border:1px solid var(--glass-stroke);
+      backdrop-filter: blur(14px) saturate(150%);
+      -webkit-backdrop-filter: blur(14px) saturate(150%);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    /* subtle gradient edge */
+    .card::before{
+      content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+      padding:1px;
+      background: linear-gradient(135deg, rgba(255,255,255,.35), rgba(255,255,255,.04));
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor; mask-composite: exclude;
+    }
+
+    /* Current weather panel */
+    .current{
+      display:grid; grid-template-columns:1.2fr .8fr; gap:18px;
+    }
+    @media (max-width: 860px){
+      .current{ grid-template-columns:1fr; }
+    }
+    .current .card{
+      display:grid; grid-template-columns: 1.1fr .9fr;
+    }
+    @media (max-width: 680px){
+      .current .card{ grid-template-columns:1fr; }
+    }
+    .section{
+      padding:22px 22px;
+    }
+    .left{
+      padding:34px 28px; display:flex; flex-direction:column; justify-content:center; gap:16px;
+    }
+    .temp{
+      font-size: clamp(40px, 7vw, 80px);
+      line-height:.95; font-weight:700; letter-spacing:-1px;
+      background: linear-gradient(180deg, #fff, #dbeaff 65%, #a9c4ff);
+      -webkit-background-clip:text; background-clip:text; color:transparent;
+      text-shadow: 0 6px 24px rgba(10,20,40,.25);
+    }
+    .condition{
+      font-size: clamp(16px, 2.8vw, 20px);
+      color:var(--muted); letter-spacing:.4px;
+    }
+    .meta{
+      display:flex; flex-wrap:wrap; gap:10px 16px; margin-top:8px;
+    }
+    .pill{
+      padding:8px 10px; border-radius:12px;
+      background: rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.12);
+      color: #d5e3ff; font-size:13px;
+    }
+
+    .right{
+      padding:22px; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:12px;
+    }
+    .when{ color:var(--muted); font-size:13px; letter-spacing:.3px; }
+    .place{ font-weight:600; font-size:16px; letter-spacing:.3px; }
+
+    /* Animated CSS Icon: Cloud + Rain (main hero icon) */
+    .icon-wrap{ position:relative; width:160px; height:130px; }
+    .cloud{
+      position:absolute; left:50%; bottom:38px; transform:translateX(-50%);
+      width:130px; height:56px; border-radius:40px;
+      background:linear-gradient(180deg, rgba(255,255,255,.96), rgba(240,246,255,.88));
+      border:1px solid rgba(255,255,255,.55);
+      filter: drop-shadow(0 8px 16px rgba(0,0,0,.35));
+    }
+    .cloud::before, .cloud::after{
+      content:""; position:absolute; border-radius:50%;
+      background:inherit; border:inherit;
+    }
+    .cloud::before{ width:58px; height:58px; left:14px; top:-22px; }
+    .cloud::after { width:72px; height:72px; right:10px; top:-30px; }
+
+    .rain-drops{
+      position:absolute; left:50%; transform:translateX(-50%);
+      bottom:6px; display:flex; gap:14px;
+      filter: drop-shadow(0 2px 2px rgba(0,0,0,.25));
+    }
+    .rain-drops span{
+      width:3px; height:18px; border-radius:2px;
+      background: linear-gradient(to bottom, rgba(189,233,255,0), rgba(125,211,255,.95));
+      animation: drop .95s linear infinite;
+      animation-delay: calc(var(--i) * -0.28s);
+    }
+    .rain-drops span:nth-child(2){ height:22px; }
+    .rain-drops span:nth-child(3){ height:20px; }
+    @keyframes drop{
+      0%   { transform: translateY(0);   opacity:0; }
+      15%  { opacity:1; }
+      85%  { opacity:.9; }
+      100% { transform: translateY(34px); opacity:0; }
+    }
+
+    /* Sub-cards area (right side) */
+    .side-grid{
+      display:grid; gap:18px;
+    }
+    .mini{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:18px; border-radius:18px;
+      background: var(--glass);
+      border:1px solid var(--glass-stroke);
+      backdrop-filter: blur(12px) saturate(140%);
+      -webkit-backdrop-filter: blur(12px) saturate(140%);
+      box-shadow: var(--shadow);
+    }
+    .mini .label{ color:var(--muted); font-size:12px; letter-spacing:.3px; }
+    .mini .value{ font-weight:700; font-size:20px; }
+
+    /* Footer note */
+    footer{
+      opacity:.7; font-size:12px; text-align:center; letter-spacing:.3px; color:#b9c7e4;
+    }
+
+    /* Reduced motion support */
+    @media (prefers-reduced-motion: reduce){
+      .rain, .fog, .glow, .lightning, .rain-drops span{ animation:none !important; }
+    }
+
+    /* ===================== THEMES: CLEAR + THUNDER ===================== */
+    /* Common theme tweaks */
+    body[class*="theme-"] .lightning { opacity: 0; } /* off by default; thunder overrides */
+    body[class*="theme-"] .rain-drops { transition: opacity .25s ease; }
+
+    /* ========== CLEAR SKY (warm, no rain, subtle sun rays) ========== */
+    body.theme-clear{
+      --accent:#ffd26a;
+      --accent2:#ffe2a3;
+      --bg1:#0d1731;
+      --bg2:#15254b;
+      --bg3:#1a2b4f;
+    }
+    body.theme-clear{
+      background:
+        radial-gradient(90vmax 90vmax at -10% -10%, #283869 0%, transparent 35%),
+        radial-gradient(80vmax 80vmax at 110% -10%, #2d2858 0%, transparent 40%),
+        linear-gradient(160deg, var(--bg1), var(--bg2) 50%, var(--bg3));
+    }
+    .theme-clear .glow.g1{ background:radial-gradient(circle, rgba(255,214,106,.9), transparent 65%); opacity:.22; }
+    .theme-clear .glow.g2{ background:radial-gradient(circle, rgba(125,211,255,.85), transparent 65%); opacity:.18; }
+    .theme-clear .rain{ opacity:0; }
+    .theme-clear .rain-drops{ opacity:0; }
+    .theme-clear .fog{ opacity:.10; }
+    .theme-clear .lightning{ display:none; }
+
+    /* Sun disc + rotating rays (behind the cloud) */
+    .theme-clear .icon-wrap::before{
+      content:"";
+      position:absolute; left:50%; top:18px; transform:translateX(-50%);
+      width:56px; height:56px; border-radius:50%;
+      background: radial-gradient(circle at 65% 35%, #fff8d6 0%, #ffd26a 50%, #f8a61b 100%);
+      box-shadow: 0 0 18px rgba(255,210,106,.6), 0 0 60px rgba(255,210,106,.35);
+      z-index:0;
+    }
+    .theme-clear .icon-wrap::after{
+      content:"";
+      position:absolute; left:50%; top:18px; transform:translateX(-50%);
+      width:88px; height:88px; border-radius:50%;
+      background: repeating-conic-gradient(from 0deg, rgba(255,210,106,.28) 0 6deg, transparent 6deg 18deg);
+      filter: drop-shadow(0 0 20px rgba(255,210,106,.25));
+      animation: spin 20s linear infinite;
+      z-index:0;
+    }
+
+    /* ========== THUNDER (darker, heavy rain, frequent flashes) ========== */
+    body.theme-thunder,
+    body.theme-thuner{ /* alias for "thuner" */
+      --accent:#b084ff;
+      --accent2:#8c69ff;
+      --bg1:#070915;
+      --bg2:#0a0f21;
+      --bg3:#0c1024;
+    }
+    body.theme-thunder,
+    body.theme-thuner{
+      background:
+        radial-gradient(90vmax 90vmax at -10% -10%, #171d3a 0%, transparent 35%),
+        radial-gradient(80vmax 80vmax at 110% -10%, #241a40 0%, transparent 40%),
+        linear-gradient(160deg, var(--bg1), var(--bg2) 50%, var(--bg3));
+    }
+    .theme-thunder .glow.g1, .theme-thuner .glow.g1{ background:radial-gradient(circle, rgba(120,95,220,.85), transparent 65%); opacity:.20; }
+    .theme-thunder .glow.g2, .theme-thuner .glow.g2{ background:radial-gradient(circle, rgba(180,120,255,.85), transparent 65%); opacity:.22; }
+    .theme-thunder .rain, .theme-thuner .rain{ opacity:.33; animation: rain 600ms linear infinite; }
+    .theme-thunder .lightning, .theme-thuner .lightning{ opacity:0; animation: flash-strong 7s linear infinite; }
+    .theme-thunder .fog, .theme-thuner .fog{ opacity:.14; }
+
+    /* Heavier icon rain + bolt */
+    .theme-thunder .rain-drops span,
+    .theme-thuner .rain-drops span{
+      height:24px; background: linear-gradient(to bottom, rgba(148,195,255,0), rgba(148,195,255,.95));
+      animation-name: dropHeavy; animation-duration: .75s; animation-iteration-count: infinite; animation-timing-function: linear;
+    }
+    .theme-thunder .icon-wrap::after,
+    .theme-thuner .icon-wrap::after{
+      content:"";
+      position:absolute; left:50%; bottom:36px; transform: translateX(-10px) rotate(-12deg);
+      width:18px; height:32px;
+      background: linear-gradient(180deg, #ffe089, #ffd26a);
+      clip-path: polygon(30% 0, 58% 0, 40% 40%, 70% 40%, 22% 100%, 38% 56%, 10% 56%);
+      box-shadow: 0 0 14px rgba(255,210,106,.45);
+      animation: flicker 1.4s steps(1) infinite;
+      opacity:.9;
+    }
+
+    /* ======= Theme Animations ======= */
+    @keyframes spin{
+      from { transform: translateX(-50%) rotate(0deg); }
+      to   { transform: translateX(-50%) rotate(360deg); }
+    }
+    @keyframes dropHeavy{
+      0%   { transform: translateY(0);   opacity:0; }
+      10%  { opacity:1; }
+      100% { transform: translateY(38px); opacity:0; }
+    }
+    @keyframes flash-strong{
+      0%, 92%, 100% { opacity:0; }
+      94% { opacity:.35; }
+      96% { opacity:0; }
+      98% { opacity:.18; }
+    }
+    @keyframes flicker{
+      0% { opacity:0; }
+      50%{ opacity:1; }
+      60%{ opacity:.2; }
+      80%{ opacity:1; }
+      90%{ opacity:.3; }
+      100%{ opacity:1; }
+    }
+
+    /* ===================== ICON CLASSES (cloud, thunder, sun, clear) ===================== */
+    .icon-gallery h3{
+      margin:0 0 8px; font-size:16px; letter-spacing:.4px; color:#dfe8ff;
+    }
+    .icon-tiles{
+      display:grid; gap:14px;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    }
+    .tile{
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      padding:14px 10px 12px; border-radius:16px;
+      background: var(--glass);
+      border:1px solid var(--glass-stroke);
+      backdrop-filter: blur(12px) saturate(140%);
+      -webkit-backdrop-filter: blur(12px) saturate(140%);
+      box-shadow: var(--shadow);
+      min-height:160px;
+    }
+    .cap{
+      margin-top:10px; font-size:12px; color:var(--muted); letter-spacing:.3px; text-align:center;
+      user-select: all;
+    }
+
+    .wx-icon{ position:relative; width:140px; height:110px; }
+    /* Sun */
+    .wx-icon .sun{
+      position:absolute; left:50%; top:18px; transform:translateX(-50%);
+      width:56px; height:56px; border-radius:50%;
+      background: radial-gradient(circle at 65% 35%, #fff8d6 0%, #ffd26a 50%, #f8a61b 100%);
+      box-shadow: 0 0 18px rgba(255,210,106,.6), 0 0 60px rgba(255,210,106,.35);
+      z-index:0;
+    }
+    .wx-icon .sun::after{
+      content:""; position:absolute; inset:-14px; border-radius:50%;
+      background: repeating-conic-gradient(from 0deg, rgba(255,210,106,.28) 0 6deg, transparent 6deg 18deg);
+      animation: spin 20s linear infinite; filter: drop-shadow(0 0 20px rgba(255,210,106,.25));
+    }
+
+    /* Cloud (standalone component for icon set) */
+    .wx-icon .c-cloud{
+      position:absolute; left:50%; bottom:36px; transform:translateX(-50%);
+      width:112px; height:48px; border-radius:36px;
+      background:linear-gradient(180deg, rgba(255,255,255,.96), rgba(240,246,255,.88));
+      border:1px solid rgba(255,255,255,.55);
+      filter: drop-shadow(0 8px 16px rgba(0,0,0,.35));
+      z-index:1;
+    }
+    .wx-icon .c-cloud::before, .wx-icon .c-cloud::after{
+      content:""; position:absolute; border-radius:50%;
+      background:inherit; border:inherit;
+    }
+    .wx-icon .c-cloud::before{ width:52px; height:52px; left:12px; top:-20px; }
+    .wx-icon .c-cloud::after { width:64px; height:64px; right:8px; top:-26px; }
+
+    .wx-icon .c-cloud.small{
+      width:84px; height:36px; bottom:40px; left:54%;
+    }
+    .wx-icon .c-cloud.small::before{ width:40px; height:40px; left:10px; top:-16px; }
+    .wx-icon .c-cloud.small::after { width:48px; height:48px; right:6px; top:-18px; }
+
+    /* Raindrops for icon set */
+    .wx-icon .drops{
+      position:absolute; left:50%; transform:translateX(-50%);
+      bottom:6px; display:flex; gap:12px;
+      filter: drop-shadow(0 2px 2px rgba(0,0,0,.25));
+    }
+    .wx-icon .drops span{
+      width:3px; height:18px; border-radius:2px;
+      background: linear-gradient(to bottom, rgba(189,233,255,0), rgba(125,211,255,.95));
+      animation: fall .95s linear infinite;
+      animation-delay: calc(var(--i) * -0.28s);
+    }
+    .wx-icon.thunder .drops span{
+      height:24px; background: linear-gradient(to bottom, rgba(148,195,255,0), rgba(148,195,255,.98));
+      animation-duration:.75s;
+    }
+    @keyframes fall{
+      0%   { transform: translateY(0);   opacity:0; }
+      15%  { opacity:1; }
+      85%  { opacity:.9; }
+      100% { transform: translateY(34px); opacity:0; }
+    }
+
+    /* Lightning bolt for icon set */
+    .wx-icon .bolt{
+      position:absolute; left:50%; bottom:34px; transform: translateX(-14px) rotate(-12deg);
+      width:18px; height:32px;
+      background: linear-gradient(180deg, #ffe089, #ffd26a);
+      clip-path: polygon(30% 0, 58% 0, 40% 40%, 70% 40%, 22% 100%, 38% 56%, 10% 56%);
+      box-shadow: 0 0 14px rgba(255,210,106,.45);
+      animation: flicker 1.4s steps(1) infinite;
+      z-index:0;
+    }
+
+    /* Labels look tighter on small screens */
+    @media (max-width:520px){
+      .icon-tiles{ grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Add class on body to switch full-page theme:
+       theme-clear | theme-thunder (or theme-thuner)
+       Example: <body class="theme-clear"> -->
+
+  <!-- Atmospheric layers -->
+  <div class="scene">
+    <div class="glow g1"></div>
+    <div class="glow g2"></div>
+    <div class="rain"></div>
+    <div class="fog f1"></div>
+    <div class="fog f2"></div>
+    <div class="lightning"></div>
+  </div>
+
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <span class="dot"></span> Moody Weather
+      </div>
+      <div class="search" title="Static UI (no JS)">
+        <div class="input">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M21 21l-4.2-4.2" stroke="#cfe5ff" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="11" cy="11" r="6.5" stroke="#cfe5ff" stroke-width="2"/>
+          </svg>
+          <form action="/" method="POST">
+          <input name="key" placeholder="Search city..." />
+        </div>
+        <button class="btn">Go</button>
+      </div>
+      </form>
+    </header>
+   {% if date and date['cod'] == 200 %}
+        
+  
+    <main class="current">
+      <!-- Left: Main card -->
+      <section class="card">
+        <div class="left">
+          <div class="temp">{{date ['main']['temp']}}°</div>
+         
+          <div class="meta">
+            <span class="pill">Feels like: {{date ['main']["feels_like"]}}°</span>
+            <span class="pill">Humidity: {{date ['main']["humidity"]}}%</span>
+            <span class="pill">Wind: {{date['wind']["speed"]}} km/h</span>
+            <span class="pill">Pressure: {{date ['main']["pressure"]}} hPa</span>
+          </div>
+        </div>
+        <div class="right">
+
+          <div class="icon-wrap" aria-hidden="true">
+ {% if date and date.weather and date.weather[0].main == "Clouds" %}
+    <div class="cloud"></div>
+    <div class="rain-drops">
+        <span style="--i:0"></span>
+        <span style="--i:1"></span>
+        <span style="--i:2"></span>
+    </div>
+{% else %}
+    
+   <div class="wx-icon clear" aria-hidden="true">
+            <span class="sun"></span> <!-- Default sunny icon -->
+{% endif %}
+
+
+            
+          </div>
+
+          <div class="place">{{date['name']}}, {{date["sys"]["country"]}}</div>
+        </div>
+      </section>
+
+      <!-- Right: Quick stats -->
+      <aside class="side-grid">
+        <div class="mini">
+          <div>
+            <div class="label"> Air Pressure at Sea Level</div>
+            <div class="value">{{date ['main']["sea_level"]}} hPa</div>
+          </div>
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="4" fill="#ffd26a"/>
+            <g stroke="#ffd26a" stroke-linecap="round">
+              <path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l-1.4-1.4M20.4 20.4L19 19M5 19l-1.4 1.4M20.4 3.6L19 5"/>
+            </g>
+          </svg>
+        </div>
+        <div class="mini">
+          <div>
+            <div class="label">Visibility</div>
+            <div class="value">{{date["visibility"]}} km</div>
+          </div>
+          <svg width="38" height="38" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" stroke="#b6c6ea" stroke-width="2"/>
+            <circle cx="12" cy="12" r="3" fill="none" stroke="#b6c6ea" stroke-width="2"/>
+          </svg>
+        </div>
+        <div class="mini">
+          <div>
+            <div class="label">Clouds</div>
+            <div class="value">{{date["clouds"]['all']}}%</div>
+          </div>
+          <svg width="38" height="38" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M7 16.5c-.7 1.1-1 1.8-1 2.3 0 1.1.9 2 2 2s2-.9 2-2M13 16.5c-.7 1.1-1 1.8-1 2.3 0 1.1.9 2 2 2s2-.9 2-2" stroke="#7dd3ff" stroke-width="2" stroke-linecap="round"/>
+            <path d="M7 12a4 4 0 1 1 7.7-1.6A3 3 0 1 1 17 17H8a4 4 0 0 1-1-5z" fill="url(#g1)" stroke="rgba(255,255,255,.4)" />
+            <defs>
+              <linearGradient id="g1" x1="7" y1="8" x2="17" y2="17">
+                <stop offset="0" stop-color="#e9f2ff"/>
+                <stop offset="1" stop-color="#c6dbff"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+      </aside>
+    </main>
+
+
+     {% else %}
+       <div class="card error-card">
+        <div class="error-content">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" fill="#ff4d4f20" stroke="#ff4d4f" stroke-width="2"/>
+                <path d="M12 8v4M12 16h.01" stroke="#ff4d4f" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <h3>City Not Found</h3>
+            <p>We couldn't find weather data for that location. Please check the spelling or try another city.</p>
+            <div class="error-meta">
+                <span class="error-code">Error Code: {{ date['cod'] }}</span>
+                <span class="error-message">{{ date['message'] }}</span>
+            </div>
+        </div>
+    </div>
+
+        </h1>
+  
+ {% endif %}
+   
+  
+  </div>
+</body>
+</html>
